@@ -182,12 +182,17 @@ def split_datasets(
     test_size: float = 0.2,
     random_state: int = 450,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
+    # Create bins for stratified splitting (for regression)
+    n_bins = 10
+    target_binned = pd.qcut(target, q=n_bins, labels=False, duplicates='drop')
+    
     X_train, X_test, y_train, y_test = train_test_split(
         features,
         target,
         test_size=test_size,
         random_state=random_state,
         shuffle=True,
+        stratify=target_binned,  # Stratify by binned target
     )
     train = X_train.copy()
     test = X_test.copy()
