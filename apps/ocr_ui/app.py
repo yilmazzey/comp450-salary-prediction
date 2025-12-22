@@ -61,6 +61,7 @@ REMOTE_CHOICES = [
 ]
 
 
+
 @lru_cache(maxsize=1)
 def load_model():
     if not MODEL_PATH.exists():
@@ -91,7 +92,7 @@ def ocr_image_with_ollama(img: Image.Image) -> str:
     Expects `ollama run deepseek-ocr` (or a server with that model) to be available.
     """
     buffered = io.BytesIO()
-    img.save(buffered, format="PNG")
+    img.save(buffered, format="JPEG", quality=85)
     b64 = base64.b64encode(buffered.getvalue()).decode("utf-8")
 
     payload = {
@@ -132,7 +133,7 @@ def extract_text_from_file(uploaded_file: bytes, mime: str, max_pages: int = 2) 
                 uploaded_file,
                 first_page=1,
                 last_page=max_pages,
-                dpi=150,
+                dpi=96,
             )
             images = pages
             progress_bar.progress(0.3)
@@ -159,7 +160,7 @@ def extract_text_from_file(uploaded_file: bytes, mime: str, max_pages: int = 2) 
         status_text.text(f"Processing page {i + 1}/{len(images)}...")
 
         # Resize large images to avoid excessive memory usage
-        max_size = 2048
+        max_size = 1024
         if max(img.size) > max_size:
             ratio = max_size / max(img.size)
             new_size = (int(img.size[0] * ratio), int(img.size[1] * ratio))
@@ -243,12 +244,15 @@ def build_feature_vector(form_data: Dict[str, Any], feature_columns: List[str]) 
     encoded = pd.get_dummies(df, columns=["Country", "EdLevelSimplified", "DevTypePrimary", "RemoteCategory"], drop_first=True)
 
     # Align to training columns
-    missing = set(feature_columns) - set(encoded.columns)
-    for col in missing:
-        encoded[col] = 0.0
-    extra = set(encoded.columns) - set(feature_columns)
+    missing = list(set(feature_columns) - set(encoded.columns))
+    if missing:
+        zeros_df = pd.DataFrame(0.0, index=encoded.index, columns=missing)
+        encoded = pd.concat([encoded, zeros_df], axis=1)
+
+    extra = list(set(encoded.columns) - set(feature_columns))
     if extra:
-        encoded = encoded.drop(columns=list(extra))
+        encoded = encoded.drop(columns=extra)
+
     encoded = encoded[feature_columns]
     return encoded
 
@@ -268,13 +272,22 @@ def main():
         max_pages = st.number_input("Max PDF pages to OCR", min_value=1, max_value=5, value=2)
         run_ocr = st.button("Run OCR", type="primary")
 
+    if "ocr_text" not in st.session_state:
+        st.session_state.ocr_text = None
+    if "ocr_images" not in st.session_state:
+        st.session_state.ocr_images = None
+
     if uploaded and run_ocr:
         raw_bytes = uploaded.read()
         text, images = extract_text_from_file(raw_bytes, uploaded.type, max_pages=max_pages)
         if not text.strip():
             st.error("No text extracted.")
-            return
+        else:
+            st.session_state.ocr_text = text
+            st.session_state.ocr_images = images
 
+    if st.session_state.ocr_text:
+        text = st.session_state.ocr_text
         st.subheader("OCR Extracted Text (truncated)")
         st.text_area("Text", value=text[:5000], height=200)
 
@@ -290,7 +303,8 @@ def main():
         st.subheader("Review & Edit Parsed Fields")
         col1, col2 = st.columns(2)
         with col1:
-            country = st.selectbox("Country", options=COMMON_COUNTRIES + ["Other"], index=COMMON_COUNTRIES.index(parsed["Country"]) if parsed["Country"] in COMMON_COUNTRIES else len(COMMON_COUNTRIES))
+            country_idx = COMMON_COUNTRIES.index(parsed["Country"]) if parsed["Country"] in COMMON_COUNTRIES else len(COMMON_COUNTRIES)
+            country = st.selectbox("Country", options=COMMON_COUNTRIES + ["Other"], index=country_idx)
             edlevel = st.selectbox(
                 "Education",
                 options=[
@@ -301,12 +315,12 @@ def main():
                     "Less than secondary",
                     "Self-taught/other",
                 ],
-                index=0 if parsed["EdLevelSimplified"] is None else 0,
+                index=0, # Simplified index selection
             )
             devtype = st.text_input("Primary Dev Type", value=parsed["DevTypePrimary"] or "Developer, full-stack")
         with col2:
             years = st.number_input("Years of experience", min_value=0.0, max_value=60.0, value=float(parsed["YearsCodeNum"] or 3.0), step=0.5)
-            remote = st.selectbox("Remote category", options=REMOTE_CHOICES, index=REMOTE_CHOICES.index(parsed["RemoteCategory"]) if parsed["RemoteCategory"] in REMOTE_CHOICES else 2)
+            remote = st.selectbox("Remote category", options=REMOTE_CHOICES, index=2)
 
         form_data = {
             "Country": country if country != "Other" else parsed.get("Country") or "United States",
@@ -334,7 +348,9 @@ def main():
         parsed_df = pd.DataFrame([form_data])
         st.download_button("Download parsed fields (CSV)", data=parsed_df.to_csv(index=False), file_name="parsed_fields.csv")
 
-        pred_vec = {"prediction_usd": model.predict(X)[0]}
+        # Reuse prediction for download if model is loaded
+        current_pred = model.predict(X)[0]
+        pred_vec = {"prediction_usd": current_pred}
         st.download_button("Download prediction (JSON)", data=json.dumps(pred_vec, indent=2), file_name="prediction.json")
 
 
