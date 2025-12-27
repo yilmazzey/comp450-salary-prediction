@@ -31,6 +31,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DATA_DIR = PROJECT_ROOT / "data" / "processed"
 MODEL_PATH = DATA_DIR / "best_model.joblib"
 FEATURE_META_PATH = DATA_DIR / "so_2025_feature_columns.json"
+ASSET_IMAGE_PATH = PROJECT_ROOT / "pngegg.png"
 
 DEFAULT_FEATURES = [
     "Country",
@@ -84,6 +85,116 @@ def load_feature_columns() -> List[str]:
 
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "deepseek-ocr")
+
+
+def inject_global_styles() -> None:
+    st.markdown(
+        """
+        <style>
+            @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap');
+            .stApp {
+                background: linear-gradient(180deg, #fff9f3 0%, #ffe7d8 55%, #ffd7b8 100%);
+                font-family: 'Poppins', 'Helvetica Neue', Arial, sans-serif;
+            }
+            .stApp [data-testid="stSidebar"] {
+                background-color: rgba(255, 255, 255, 0.75);
+                backdrop-filter: blur(6px);
+            }
+            .top-nav {
+                max-width: 960px;
+                margin: 0 auto 1.5rem auto;
+                position: sticky;
+                top: 0;
+                z-index: 100;
+                background: transparent;
+                padding: 0.75rem 1.25rem;
+                border-radius: 1.5rem;
+                box-shadow: none;
+                display: flex;
+                gap: 1.5rem;
+                align-items: center;
+                justify-content: center;
+            }
+            .top-nav a {
+                text-decoration: none;
+                font-weight: 600;
+                color: #ff7a00;
+                transition: color 0.3s ease;
+            }
+            .top-nav a:hover {
+                color: #ff4d00;
+            }
+            .main-container {
+                max-width: 960px;
+                margin: 0 auto;
+            }
+            .hero-card {
+                background: transparent;
+                padding: 2rem 0 1rem 0;
+                border-radius: 1.75rem;
+                box-shadow: none;
+            }
+            .section-anchor {
+                position: relative;
+                top: -80px;
+            }
+            .info-pill {
+                display: inline-block;
+                padding: 0.35rem 0.9rem;
+                border-radius: 999px;
+                background: rgba(255, 135, 25, 0.18);
+                color: #a35514;
+                font-weight: 600;
+                margin-bottom: 0.75rem;
+            }
+            .about-card {
+                background: transparent;
+                padding: 1.5rem 0;
+                border-radius: 1.5rem;
+                box-shadow: none;
+                border: 1px solid rgba(255, 122, 0, 0.35);
+            }
+            .team-grid {
+                display: flex;
+                gap: 2rem;
+                flex-wrap: wrap;
+                justify-content: center;
+            }
+            .team-card {
+                min-width: 210px;
+                background: rgba(255, 255, 255, 0.35);
+                padding: 1.25rem 1.5rem;
+                border-radius: 1.25rem;
+                text-align: center;
+                box-shadow: 0 6px 18px rgba(255, 122, 0, 0.15);
+                backdrop-filter: blur(2px);
+            }
+            .team-card h4 {
+                margin-bottom: 0.35rem;
+                font-weight: 600;
+            }
+            .team-card a {
+                display: inline-flex;
+                align-items: center;
+                gap: 0.4rem;
+                text-decoration: none;
+                color: #0a66c2;
+                font-weight: 500;
+            }
+            .team-card a:hover {
+                color: #084a8f;
+            }
+            .linkedin-icon {
+                width: 20px;
+                height: 20px;
+            }
+            h1, h2, h3, .stMarkdown, .stButton > button, .stTextInput, .stSelectbox, label {
+                font-family: 'Poppins', 'Helvetica Neue', Arial, sans-serif;
+            }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
 
 
 def ocr_image_with_ollama(img: Image.Image) -> str:
@@ -259,18 +370,54 @@ def build_feature_vector(form_data: Dict[str, Any], feature_columns: List[str]) 
 
 def main():
     st.set_page_config(page_title="OCR + Salary Prediction", layout="wide")
-    st.title("OCR CV → Salary Prediction")
+    inject_global_styles()
 
     st.markdown(
-        "Upload a CV (PDF/image), run DeepSeek OCR, review parsed fields, and predict salary "
-        "with the trained StackOverflow salary model."
+        """
+        <div class="top-nav">
+            <a href="#top">Home</a>
+            <a href="#predictor">Predictor</a>
+            <a href="#about">About Us</a>
+        </div>
+        <div id="top" class="section-anchor"></div>
+        <div class="main-container">
+        """,
+        unsafe_allow_html=True,
     )
 
-    with st.sidebar:
-        st.header("Upload")
-        uploaded = st.file_uploader("CV file", type=["pdf", "png", "jpg", "jpeg", "webp"])
+    hero_container = st.container()
+    with hero_container:
+        st.markdown('<div class="hero-card">', unsafe_allow_html=True)
+        cols = st.columns([1.6, 0.9])
+        with cols[0]:
+            st.markdown('<div class="info-pill">Stack Overflow 2025 Salary Insights</div>', unsafe_allow_html=True)
+            st.title("From CV to Salary Insights")
+            st.markdown(
+                "Upload a resume, let DeepSeek OCR highlight core developer traits, and plug them into our "
+                "HistGradientBoostingRegressor (log-target) trained on Stack Overflow’s 2025 survey to estimate annual compensation."
+            )
+        with cols[1]:
+            if ASSET_IMAGE_PATH.exists():
+                st.image(Image.open(ASSET_IMAGE_PATH), width=200)
+        st.markdown('</div>', unsafe_allow_html=True)
+
+    st.markdown('<div id="predictor" class="section-anchor"></div>', unsafe_allow_html=True)
+    st.header("Predictor")
+    st.caption("Run DeepSeek OCR, refine the parsed profile, and request a salary estimate in USD.")
+
+    upload_col, info_col = st.columns([1, 2])
+    with upload_col:
+        st.subheader("Upload CV")
+        uploaded = st.file_uploader("Choose a file", type=["pdf", "png", "jpg", "jpeg", "webp"])
         max_pages = st.number_input("Max PDF pages to OCR", min_value=1, max_value=5, value=2)
         run_ocr = st.button("Run OCR", type="primary")
+    with info_col:
+        st.subheader("How it works")
+        st.markdown(
+            "1. Upload a PDF or image CV (up to 5 pages).\n"
+            "2. DeepSeek OCR extracts text via an Ollama endpoint.\n"
+            "3. We pre-fill developer profile fields, which you can review before predicting salary."
+        )
 
     if "ocr_text" not in st.session_state:
         st.session_state.ocr_text = None
@@ -352,6 +499,44 @@ def main():
         current_pred = model.predict(X)[0]
         pred_vec = {"prediction_usd": current_pred}
         st.download_button("Download prediction (JSON)", data=json.dumps(pred_vec, indent=2), file_name="prediction.json")
+
+    st.markdown('<div id="about" class="section-anchor"></div>', unsafe_allow_html=True)
+    st.header("About Us")
+    st.caption("Meet the team behind the salary prediction project.")
+
+    linkedin_svg = (
+        """
+        <svg class="linkedin-icon" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+            <path d="M20.447 20.452H16.89v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.448-2.136 2.944v5.662H9.337V9h3.412v1.561h.047c.476-.9 1.637-1.852 3.372-1.852 3.605 0 4.27 2.373 4.27 5.463v6.28zM5.337 7.433c-1.1 0-1.99-.892-1.99-1.99 0-1.1.89-1.99 1.99-1.99 1.099 0 1.99.89 1.99 1.99 0 1.098-.891 1.99-1.99 1.99zM6.99 20.452H3.683V9H6.99v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.225 0z"/>
+        </svg>
+        """
+    )
+
+    with st.container():
+        st.markdown(
+            f"""
+            <div class="about-card">
+                <div class="team-grid">
+                    <div class="team-card">
+                        <h4>Zeynep Yılmaz</h4>
+                        <a href="https://tr.linkedin.com/in/yilmazzey" target="_blank">{linkedin_svg}LinkedIn</a>
+                    </div>
+                    <div class="team-card">
+                        <h4>Zehra Mert</h4>
+                        <a href="https://tr.linkedin.com/in/zehramert8" target="_blank">{linkedin_svg}LinkedIn</a>
+                    </div>
+                    <div class="team-card">
+                        <h4>Onat Sarıbıyık</h4>
+                        <a href="https://tr.linkedin.com/in/onat-saribiyik-129671249" target="_blank">{linkedin_svg}LinkedIn</a>
+                    </div>
+                </div>
+                <p style="margin-top:1.25rem; text-align:center;">This project combines modern OCR techniques with gradient boosting to deliver quick salary insights for developers worldwide.</p>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+    st.markdown("</div>", unsafe_allow_html=True)
 
 
 if __name__ == "__main__":
